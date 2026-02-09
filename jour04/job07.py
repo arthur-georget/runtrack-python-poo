@@ -1,4 +1,5 @@
 from random import shuffle
+from time import sleep
 
 class Card:
 
@@ -15,23 +16,30 @@ class Card:
         else:
             raise Exception("Card.__init__(): rank should be an int.")
 
-    def get_color(self):
+    def get_color(self) -> str:
         return self.__color
     
-    def get_rank(self):
+    def get_rank(self) -> int:
         return self.__rank
 
-    def get_value(self):
+    def get_value(self) -> int:
         return self.__value
+    
+    def set_value(self, value: int):
+        if isinstance(value, int):
+            self.__value = value
+        else:
+            raise Exception("Card.set_value(): value should be an int.")
     
     def set_blackjack_value(self):
         if self.__rank >= 11:
             self.__value = 10
 
-    def set_ace_value(self):
+    def ask_ace_value(self):
         self.__value = 0
         while self.__value not in (1,11):
             self.__value = input("Quelle valeur voulez-vous assigner à votre As? (1 ou 10)")
+        sleep(1)
 
     def get_card_name(self):
         if self.__rank == 1:
@@ -91,7 +99,7 @@ class Dealer:
 class Player(Dealer):
 
     def __init__(self, name: str):
-        super().__init__()
+        Dealer.__init__(self)
         if isinstance(name, str):
             self.__name = name
         else:
@@ -115,8 +123,9 @@ class Game:
     def __init__(self):
         self.__pack = []
         self.__players_amount = None
-        self.__players = []
+        self.__players = [Player]
         self.__dealer = Dealer()
+        self.playing = True
         
     def display_cards(self):
         for card in self.__pack:
@@ -130,6 +139,14 @@ class Game:
                 card = Card(color,i)
                 card.set_blackjack_value()
                 self.__pack.append(card)
+        print("Le croupier sort un nouveau paquet de carte...")
+        sleep(2)
+    
+    def shuffle_pack(self):
+        shuffle(self.__pack)
+        print("Le croupier mélange les cartes.")
+        print("tchff tchff tchff...")
+        sleep(2)
     
     def build_players(self):
         self.__players = []
@@ -139,17 +156,16 @@ class Game:
                 name = input(f"Joueur {i}, comment vous appelez-vous? ")
             self.__players.append(Player(name))
     
-    def shuffle_pack(self):
-        shuffle(self.__pack)
-
     def start_game(self):
         for player in self.__players:
             for _ in range(2):
                 player.get_card(self.__pack[-1])
-                print(f"{player.get_name()}: Vous avez pioché une carte {self.__pack[-1].get_card_name()}.")
+                print(f"{player.get_name()}: Vous avez reçu une carte {self.__pack[-1].get_card_name()}.")
                 self.__pack.pop()
+                sleep(1)
             player.set_hand_value()
             print(f"{player.get_name()}, votre main vaut {player.get_hand_value()} points.")
+            sleep(1)
         
     def ask_how_many_players(self):
         self.__players_amount = 0
@@ -163,26 +179,75 @@ class Game:
                 choice = input(f"{player.get_name()}, voulez-vous une carte supplémentaire? (O/N) ")
                 if choice in ("O","o","Oui","oui","OUI") :
                     player.get_card(self.__pack[-1])
-                    print(f"{player.get_name()}, vous avez pioché une carte {self.__pack[-1].get_card_name()}.")
+                    print(f"{player.get_name()}, vous avez une carte {self.__pack[-1].get_card_name()}.")
+                    sleep(1)
+                    if self.__pack[-1].get_rank() == 1:
+                        self.__pack[-1].ask_ace_value()
                     self.__pack.pop()
                     player.set_hand_value()
                     print(f"{player.get_name()}, votre main vaut {player.get_hand_value()} points.")
+                    sleep(1)
                     if player.get_hand_value() > 21:
                         player.set_is_winning(False)
                         print(f"Dommage {player.get_name()}: vous avez perdu!")
                         break
 
-    def get_winner(self):
-        pass
+    def dealer_turn(self):
+        dealer_hand_value = 0
+        while dealer_hand_value <= 17:
+            self.__dealer.get_card(self.__pack[-1])
+            print(f"Le croupier a pioché une carte {self.__pack[-1].get_card_name()}.")
+            sleep(1)
+            if self.__pack[-1].get_rank() == 1:
+                if self.__dealer.get_hand_value() <= 10:
+                    self.__pack[-1].set_value(11)
+                    print("Le croupier a choisi une valeur d'As à 11.")
+                else:
+                    print("Le croupier a choisi une valeur d'As à 1.")
+                sleep(1)
+            self.__pack.pop()
+            self.__dealer.set_hand_value()
+            dealer_hand_value = self.__dealer.get_hand_value()
+            
+    def reward_winners(self):
+        for player in self.__players:
+            if player.get_is_winning():
+                if self.__dealer.get_hand_value() < player.get_hand_value() or self.__dealer.get_hand_value() > 21:
+                    player.set_score(player.get_score() + 1)
+                    print(f"Bravo {player.get_name()}! Vous avez battu le croupier avec {player.get_hand_value()} contre {self.__dealer.get_hand_value()} points.")
+                else:
+                    print(f"{player.get_name()}, vous avez perdu.")
+                sleep(1)
 
-try:
-    game = Game()
-    game.build_pack()
-    game.shuffle_pack()
-    game.ask_how_many_players()
-    game.build_players()
-    game.start_game()
-    game.ask_players_choices()
+    def reset_game(self):
+        for player in self.__players:
+            player.throw_hand()
+        self.__dealer.throw_hand()
+        self.build_pack()
+        self.shuffle_pack()
 
-except KeyboardInterrupt:
-    print("\nMerci d'avoir joué au BlackJack.")
+    def ask_to_play_again(self):
+        choice = ""
+        while choice not in ("N","n","Non","non","NON","O","o","Oui","oui","OUI"):
+            choice = input(f"Voulez-vous jouer encore? (O/N) ")
+            if choice in ("N","n","Non","non","NON") :
+                self.playing = False
+def main():
+    try:
+        game = Game()
+        game.ask_how_many_players()
+        game.build_players()
+        while game.playing:
+            game.reset_game()
+            game.start_game()
+            game.ask_players_choices()
+            game.dealer_turn()
+            game.reward_winners()
+            game.ask_to_play_again()
+        print("\nMerci d'avoir joué au BlackJack.")
+
+    except KeyboardInterrupt:
+        print("\nMerci d'avoir joué au BlackJack.")
+
+if __name__ == "__main__":
+    main()
